@@ -1,7 +1,5 @@
 # GPG-5 generated code (and Grock edited)
 
-
-
 import cv2
 import numpy as np
 
@@ -69,83 +67,12 @@ def auto_rotate(img):
 
 
 
+
+
+
+
+#gpt_5
 def extract_screen(frame, dst_w=400, dst_h=160):
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (7, 7), 0)  # Увеличили для сглаживания бликов
-
-    # Адаптивная бинаризация
-    thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 19, 2)  # INV для тёмных контуров
-
-    # Улучшаем контуры
-    thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))  # Больше ядро для закрытия
-
-    # Отладка: сохраняем thresh для просмотра
-    cv2.imwrite("thresh_debug.jpg", thresh)
-
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    screen_cnt = None
-    max_area = 0
-    for c in contours:
-        peri = cv2.arcLength(c, True)
-        approx = cv2.approxPolyDP(c, 0.02 * peri, True)
-        area = cv2.contourArea(c)
-        if len(approx) == 4 and area > 500:  # Снизили минимальную площадь
-            if area > max_area:
-                screen_cnt = approx
-                max_area = area
-
-    if screen_cnt is None:
-        raise ValueError("cant find screen, see thresh_debug.jpg and adjust threshold.")
-
-    rect = order_points(screen_cnt.reshape(4, 2))  # Предполагаю, что order_points определена
-    dst = np.array([[0, 0], [dst_w-1, 0], [dst_w-1, dst_h-1], [0, dst_h-1]], dtype="float32")
-    M = cv2.getPerspectiveTransform(rect, dst)
-    warp = cv2.warpPerspective(frame, M, (dst_w, dst_h))
-
-    # Отладка
-    cv2.drawContours(frame, [screen_cnt], -1, (0, 255, 0), 2)
-    cv2.imshow("Contours", frame)
-    cv2.imshow("Warp", warp)
-    return warp
-
-
-
-def old__extract_screen(frame, dst_w=400, dst_h=160):
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
-    _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    # Улучшаем контуры с помощью морфологии
-    thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
-
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    screen_cnt = None
-    max_area = 0
-    for c in contours:
-        peri = cv2.arcLength(c, True)
-        approx = cv2.approxPolyDP(c, 0.02 * peri, True)
-        area = cv2.contourArea(c)
-        if len(approx) == 4 and area > max_area:
-            screen_cnt = approx
-            max_area = area
-
-    if screen_cnt is None:
-        raise ValueError("Экран не найден! Проверь изображение или порог бинаризации.")
-
-    rect = order_points(screen_cnt.reshape(4, 2))
-    dst = np.array([[0, 0], [dst_w-1, 0], [dst_w-1, dst_h-1], [0, dst_h-1]], dtype="float32")
-    M = cv2.getPerspectiveTransform(rect, dst)
-    warp = cv2.warpPerspective(frame, M, (dst_w, dst_h))
-
-    # Отладка: показываем контуры и трансформированную область
-    cv2.drawContours(frame, [screen_cnt], -1, (0, 255, 0), 2)
-    cv2.imshow("Contours", frame)
-    return auto_rotate(warp)
-
-
-def old_extract_screen(frame, dst_w=400, dst_h=160):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5,5), 0)
     _,thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
@@ -240,17 +167,63 @@ def read_number(warp):
 
 # --- тест ---
 #  frame = cv2.imread("images/blury_indicator.png")
-frame = cv2.imread("images/indicator.png")
+#  frame = cv2.imread("images/blury_ind2.png")
+#  frame = cv2.imread("images/rect.png")
+#  frame = cv2.imread("images/indicator.png")
 #  frame = cv2.imread("images/indicator_tilt.png")
-warp = extract_screen(frame)
-val = read_number(warp)
-print("recognized_digits:", val)
+#  warp = extract_screen(frame)
+#  val = read_number(warp)
+#  print("recognized_digits:", val)
 
-cv2.imshow("warp", warp)
+#  cv2.imshow("warp", warp)
+#  cv2.waitKey(0)
+
+
+# Загружаем изображение
+frame = cv2.imread("images/indicator_tilt.png")
+gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+blur = cv2.GaussianBlur(gray, (5,5), 0)
+_,thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+
+# 1. ПОКАЖЕМ ЧЕРНО-БЕЛОЕ ИЗОБРАЖЕНИЕ ПОСЛЕ ПОРОГА
+# Это самое важное для диагностики. Виден ли на нем четкий белый прямоугольник на черном фоне?
+cv2.imshow('1. Threshold (Binarization)', thresh)
+
+# 2. НАРИСУЕМ ВСЕ КОНТУРЫ, КОТОРЫЕ НАШЕЛ ALGORITHM
+# Создадим копию исходного изображения для рисования
+contour_image = frame.copy()
+contours,_ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+# Рисуем ВСЕ контуры зеленым цветом
+cv2.drawContours(contour_image, contours, -1, (0,255,0), 2)
+cv2.imshow('2. All Found Contours', contour_image)
+
+# 3. ПРОЙДЕМСЯ ПО КОНТУРАМ И ПОПРОБУЕМ ИХ АППРОКСИМИРОВАТЬ
+approx_image = frame.copy()
+for c in contours:
+    peri = cv2.arcLength(c, True)
+    approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+    area = cv2.contourArea(c)
+    # Рисуем аппроксимированный контур
+    # Синий - любой контур
+    cv2.drawContours(approx_image, [approx], -1, (255, 0, 0), 2)
+    # Зеленый - если у него 4 угла
+    if len(approx) == 4:
+        cv2.drawContours(approx_image, [approx], -1, (0, 255, 0), 3)
+        print(f"Found 4-point contour with area: {area}") # Выведем площадь в консоль
+
+cv2.imshow('3. Contour Approximation (Blue: any, Green: quadrilateral)', approx_image)
+
 cv2.waitKey(0)
+cv2.destroyAllWindows()
 
-
-
+# Только после этого пробуем запустить основную функцию
+try:
+    warp = extract_screen(frame)
+    cv2.imshow('Result', warp)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+except ValueError as e:
+    print(e)
 
 
 
