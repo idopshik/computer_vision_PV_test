@@ -3,6 +3,8 @@
 import cv2
 import numpy as np
 
+DEBUG=True
+
 # --- карта сегментов ---
 DIGITS = {
     (1,1,1,1,1,1,0): "0",
@@ -73,9 +75,18 @@ def auto_rotate(img):
 
 #gpt_5
 def extract_screen(frame, dst_w=400, dst_h=160):
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5,5), 0)
-    _,thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    if DEBUG:
+        cv2.imshow('1. Original', frame)
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) #конвертация в серый
+    if DEBUG:
+        cv2.imshow('2. Grayscale', gray)
+    blur = cv2.GaussianBlur(gray, (5,5), 0) #Усреднение. 5,5 это ядно, которым катат по всему рисунку. Усредняют. ДОжно быть нечеётное и небольшое.
+    if DEBUG:
+        cv2.imshow('3. Blurred', blur)
+    _,thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU) #сделать только два цвета. получить маску
+    #  thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 3)
+    if DEBUG:
+        cv2.imshow('4. Threshold (Otsu)', thresh)
     contours,_ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     screen_cnt = None
@@ -99,6 +110,9 @@ def extract_screen(frame, dst_w=400, dst_h=160):
 
 def read_digit(img):
     """Распознаём одну цифру"""
+
+    if DEBUG:
+        cv2.imshow('digit', img)
     h, w = img.shape[:2]
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
@@ -130,6 +144,9 @@ def read_digit(img):
         #  return None
 
 def read_number(warp):
+
+    if DEBUG:
+        cv2.imshow('warp', warp)
     h, w = warp.shape[:2]
     gray = cv2.cvtColor(warp, cv2.COLOR_BGR2GRAY)
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
@@ -170,13 +187,17 @@ def read_number(warp):
 #  frame = cv2.imread("images/blury_ind2.png")
 #  frame = cv2.imread("images/rect.png")
 #  frame = cv2.imread("images/indicator.png")
-#  frame = cv2.imread("images/indicator_tilt.png")
-#  warp = extract_screen(frame)
-#  val = read_number(warp)
-#  print("recognized_digits:", val)
+frame = cv2.imread("images/indicator_tilt.png")
+#Картинка примерно должна быть 800*600. В разы меньше будет мало. Если больше хотябы в два раза - уже в десятки раз упадёт скорсоть распознавания.
+if frame is None:
+    print("Ошибка! Не удалось загрузить изображение. Проверь путь к файлу.")
+    exit() # или return, если это внутри функции
+warp = extract_screen(frame)
+val = read_number(warp)
+print("recognized_digits:", val)
 
-#  cv2.imshow("warp", warp)
-#  cv2.waitKey(0)
+cv2.imshow("warp", warp)
+cv2.waitKey(0)
 
 
 # Загружаем изображение
