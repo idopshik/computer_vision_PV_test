@@ -22,7 +22,7 @@ LOCATION_FILE = "screen_location.txt"
 
 
 # Задайте координаты окна Vysor
-manual_location = {'left': 1504, 'top': 727, 'width': 290, 'height': 249}
+monitor = {'left': 1492, 'top': 729, 'width': 238, 'height': 87}
 
 
 
@@ -33,14 +33,14 @@ def write_strings_to_json(location, filename='screen_location.json'):
     data = {
         'left': str(location.left),
         'top': str(location.top),
-        'widht': str(location.width),
+        'width': str(location.width),
         'height': str(location.height)
     }
 
     try:
         with open(filename, 'w', encoding='utf-8') as file:
             json.dump(data, file, ensure_ascii=False, indent=2)
-        print(f"✓ written in JSON: {filename}")
+        print(f" written in JSON: {filename}")
         return True
     except Exception as e:
 
@@ -168,7 +168,22 @@ def main():
             # в зависимости от освещения и контраста вашего индикатора.
             # Например:
             # _, binary_frame = cv2.threshold(gray_frame, 150, 255, cv2.THRESH_BINARY)
-            _, binary_frame = cv2.threshold(gray_frame, 128, 255, cv2.THRESH_BINARY)
+
+
+
+            # Бинаризация: цифры БЕЛЫЕ на ЧЁРНОМ фоне
+            _, thresh = cv2.threshold(gray_frame, 128, 255, cv2.THRESH_BINARY)
+            # ВНИМАНИЕ: Здесь я поменял на cv2.THRESH_BINARY (не INV)
+
+            # --- Шаг 1: Морфологическая дилатация ---
+            # Создаем ядро для дилатации.
+            kernel = np.ones((5,5), np.uint8)
+            # Применяем дилатацию, чтобы соединить сегменты
+            dilated_thresh = cv2.dilate(thresh, kernel, iterations=1)
+
+
+            #  _, binary_frame = cv2.threshold(gray_frame, 128, 255, cv2.THRESH_BINARY)
+            binary_frame = dilated_thresh
 
             # Передача кадра в Pytesseract для распознавания
             # Преобразуем массив NumPy обратно в объект PIL, как того требует Pytesseract
