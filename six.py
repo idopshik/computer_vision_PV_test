@@ -40,15 +40,112 @@ def order_points(pts):
     rect[3] = pts[np.argmax(diff)]
     return rect
 
+#  def orig_auto_rotate(img):
+    #  h, w = img.shape[:2]
+    #  roi = img[int(h*0.7):h, int(w*0.7):w]  # правый-низ
+    #  gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    #  if np.mean(gray) < 200:  # если "mm" не светлое
+        #  img = cv2.rotate(img, cv2.ROTATE_180)
+    #  return img
+
+
+
 def auto_rotate(img):
     h, w = img.shape[:2]
-    roi = img[int(h*0.7):h, int(w*0.7):w]  # правый-низ
+    roi = img[int(h*0.7):h, int(w*0.7):w]  # Правый-низ для проверки "mm"
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-    if np.mean(gray) < 200:  # если "mm" не светлое
+    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # Простая проверка на "mm" (можно улучшить с помощью OCR, например Tesseract)
+    template = cv2.imread("mm_template.png", 0)  # Предполагаем, что у тебя есть шаблон "mm"
+    if template is None:
+        raise ValueError("template not found")
+    res = cv2.matchTemplate(thresh, template, cv2.TM_CCOEFF_NORMED)
+    loc = np.where(res >= 0.8)  # Порог совпадения
+    if len(loc[0]) == 0:  # Если "mm" не найдено, поворачиваем
         img = cv2.rotate(img, cv2.ROTATE_180)
     return img
 
+
+
+
 def extract_screen(frame, dst_w=400, dst_h=160):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (7, 7), 0)  # Увеличили для сглаживания бликов
+
+    # Адаптивная бинаризация
+    thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 19, 2)  # INV для тёмных контуров
+
+    # Улучшаем контуры
+    thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))  # Больше ядро для закрытия
+
+    # Отладка: сохраняем thresh для просмотра
+    cv2.imwrite("thresh_debug.jpg", thresh)
+
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    screen_cnt = None
+    max_area = 0
+    for c in contours:
+        peri = cv2.arcLength(c, True)
+        approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+        area = cv2.contourArea(c)
+        if len(approx) == 4 and area > 500:  # Снизили минимальную площадь
+            if area > max_area:
+                screen_cnt = approx
+                max_area = area
+
+    if screen_cnt is None:
+        raise ValueError("cant find screen, see thresh_debug.jpg and adjust threshold.")
+
+    rect = order_points(screen_cnt.reshape(4, 2))  # Предполагаю, что order_points определена
+    dst = np.array([[0, 0], [dst_w-1, 0], [dst_w-1, dst_h-1], [0, dst_h-1]], dtype="float32")
+    M = cv2.getPerspectiveTransform(rect, dst)
+    warp = cv2.warpPerspective(frame, M, (dst_w, dst_h))
+
+    # Отладка
+    cv2.drawContours(frame, [screen_cnt], -1, (0, 255, 0), 2)
+    cv2.imshow("Contours", frame)
+    cv2.imshow("Warp", warp)
+    return warp
+
+
+
+def old__extract_screen(frame, dst_w=400, dst_h=160):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # Улучшаем контуры с помощью морфологии
+    thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    screen_cnt = None
+    max_area = 0
+    for c in contours:
+        peri = cv2.arcLength(c, True)
+        approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+        area = cv2.contourArea(c)
+        if len(approx) == 4 and area > max_area:
+            screen_cnt = approx
+            max_area = area
+
+    if screen_cnt is None:
+        raise ValueError("Экран не найден! Проверь изображение или порог бинаризации.")
+
+    rect = order_points(screen_cnt.reshape(4, 2))
+    dst = np.array([[0, 0], [dst_w-1, 0], [dst_w-1, dst_h-1], [0, dst_h-1]], dtype="float32")
+    M = cv2.getPerspectiveTransform(rect, dst)
+    warp = cv2.warpPerspective(frame, M, (dst_w, dst_h))
+
+    # Отладка: показываем контуры и трансформированную область
+    cv2.drawContours(frame, [screen_cnt], -1, (0, 255, 0), 2)
+    cv2.imshow("Contours", frame)
+    return auto_rotate(warp)
+
+
+def old_extract_screen(frame, dst_w=400, dst_h=160):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5,5), 0)
     _,thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
@@ -65,7 +162,7 @@ def extract_screen(frame, dst_w=400, dst_h=160):
             max_area = area
 
     if screen_cnt is None:
-        raise ValueError("Экран не найден!")
+        raise ValueError("display isn't found")
 
     rect = order_points(screen_cnt.reshape(4,2))
     dst = np.array([[0,0],[dst_w-1,0],[dst_w-1,dst_h-1],[0,dst_h-1]], dtype="float32")
@@ -88,28 +185,66 @@ def read_digit(img):
 
     return DIGITS.get(tuple(on), "?")
 
-def read_number(warp):
-    """Распознаём всё число на экране"""
-    h, w = warp.shape[:2]
-    digits = []
-    # предполагаем 6 цифр, фиксированные окна
-    cell_w = w // 6
-    for i in range(6):
-        roi = warp[30:130, i*cell_w:(i+1)*cell_w]
-        d = read_digit(roi)
-        digits.append(d)
+#  def orig_read_number(warp):
+    #  """Распознаём всё число на экране"""
+    #  h, w = warp.shape[:2]
+    #  digits = []
+    #  # предполагаем 6 цифр, фиксированные окна
+    #  cell_w = w // 6
+    #  for i in range(6):
+        #  roi = warp[30:130, i*cell_w:(i+1)*cell_w]
+        #  d = read_digit(roi)
+        #  digits.append(d)
 
-    num_str = "".join(digits).replace("?", "")
-    try:
-        return float(num_str)/100  # поправка на десятичную точку
-    except:
-        return None
+    #  num_str = "".join(digits).replace("?", "")
+    #  try:
+        #  return float(num_str)/100  # поправка на десятичную точку
+    #  except:
+        #  return None
+
+def read_number(warp):
+    h, w = warp.shape[:2]
+    gray = cv2.cvtColor(warp, cv2.COLOR_BGR2GRAY)
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, np.ones((3,3), np.uint8))
+
+    # Проверка минуса
+    minus_roi = binary[30:130, 0:int(w*0.2)]  # Левая часть для минуса
+    is_negative = np.mean(minus_roi) < 128
+
+    # Поиск контуров цифр
+    contours, _ = cv2.findContours(binary[30:130], cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    digits = []
+    for c in contours:
+        x, y, w_c, h_c = cv2.boundingRect(c)
+        if w_c > 10 and h_c > 50:  # Фильтр мелких контуров
+            roi = warp[30:130, x:x+w_c]
+            d = read_digit(roi)
+            digits.append((x, d))
+
+    # Сортировка по x и сбор числа
+    digits.sort(key=lambda x: x[0])
+    num_str = "".join(d[1] for d in digits).replace("?", "")
+
+    # Поиск десятичной точки (упрощённо, можно улучшить)
+    dot_pos = num_str.find(".") if "." in num_str else -1
+    if dot_pos == -1:
+        try:
+            val = float(num_str) / 10 if len(num_str) == 4 else float(num_str)  # Адаптивная поправка
+        except:
+            return None
+    else:
+        val = float(num_str)
+
+    return -val if is_negative else val
 
 # --- тест ---
-frame = cv2.imread("indicator.jpg")
+#  frame = cv2.imread("images/blury_indicator.png")
+frame = cv2.imread("images/indicator.png")
+#  frame = cv2.imread("images/indicator_tilt.png")
 warp = extract_screen(frame)
 val = read_number(warp)
-print("Распознанное значение:", val)
+print("recognized_digits:", val)
 
 cv2.imshow("warp", warp)
 cv2.waitKey(0)
